@@ -7,3 +7,7 @@
    -
 
 3)
+
+
+ChemBL
+sqlite3 data/chembl/chembl_23/chembl_23_sqlite/chembl_23.db "SELECT DISTINCT md.molregno, md.chembl_id, act.standard_type, act.standard_value, act.standard_units FROM activities act, molecule_dictionary md WHERE act.molregno = MD.molregno AND act.standard_type  = 'IC50'" | head
