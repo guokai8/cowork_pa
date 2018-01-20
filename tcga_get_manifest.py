@@ -1,7 +1,6 @@
 #!/usr/bin/env python
-import sys, random
-import requests
-import json
+import sys
+import requests, json
 from argparse import ArgumentParser, FileType
 
 # Python Examples found at https://docs.gdc.cancer.gov/API/Users_Guide/Python_Examples/
@@ -10,14 +9,14 @@ from argparse import ArgumentParser, FileType
 #    e.g. 0X for tumor and 1X for normal
 
 def download_manifest(verbose):
-    files_endpt = 'https://api.gdc.cancer.gov/files'
+    files_endpt = "https://api.gdc.cancer.gov/files"
 
     # The 'fields' parameter is passed as a comma-separated string of single names.
     fields = [
         "cases.project.project_id",
         "cases.case_id",
         "cases.disease_type",
-        # "cases.samples.sample_type_id",
+        "cases.samples.sample_type_id",
         "submitter_id",
         "file_name",
         "cases.samples.sample_type",
@@ -67,7 +66,8 @@ def download_manifest(verbose):
         lines = requests.get(files_endpt, params = params).content.strip().split('\n')
         if len(lines) <= 1:
             break
-        
+
+        # Output header once
         if num_downloads == 0:
             line = lines[0]
             fields = line.split()

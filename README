@@ -1,7 +1,7 @@
 1) TCGA Gene Expression Data
-   - Download a file transfer program, GDC
-   - Download a manifest
-   - Run ./gdc-client download --manifest gdc_manifest.2018-01-13T19_57_56.464062.txt
+   ./tcga_get_manifest.py > tcga_manifest.txt
+   ./tcga_get_files.py tcga_manifest.txt
+   ./tcga_get_expressions.py tcga_manifest.txt output -o tcga_expr
 
 2) LINCS
    -
