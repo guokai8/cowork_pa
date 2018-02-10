@@ -5,6 +5,8 @@ library(affy)
 library(affyPLM)
 library(GEOquery)
 library(genefilter)
+library(cluster)
+library(WGCNA)
 
 geo_fname <- "GSE12790_series_matrix.txt.gz"
 remote_fname <- paste("ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE12nnn/GSE12790/matrix/", geo_fname, sep="")
@@ -45,6 +47,25 @@ plot(E[10723,], xlab="Array Index ",
      col="steelblue",pch=16,
      ylab="Normalised Expression",main=rownames(E)[10723])
 cor(E[1274,],E[10723,], use = "complete.obs")
+
+# Calcuate Euclidean distances among samples
+euc.dist <- dist(t(exprs(raw)))
+euc.dist
+
+# corMat <-cor(exprs(raw))
+# corMat
+# cor.dist <- as.dist(1 - corMat)
+
+clust <- hclust(euc.dist)
+clust
+par(mfrow=c(1,1))
+
+sample_group <- pd$characteristics_ch1
+group_colors <- sample_group
+levels(group_colors) <- c("yellow","blue", "red", "green", "gray", "black", "black", "black")
+
+clust.euclid = plot(clust, labels=pd$title, cex=0.5)
+plotDendroAndColors(clust.euclid,colors=groupColours)
 
 # Examples
 
