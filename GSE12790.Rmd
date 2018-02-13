@@ -1,5 +1,5 @@
 ---
-title: "Identification of Gene Signature of Breast Cancer Subtypes Resistant to CDK4/6 Inhibitors"
+title: "Identification of Gene Signatures of Breast Cancer Subtypes Resistant to CDK4/6 Inhibitors"
 author: "Daehwan Kim and Prasanna Alluri"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: html_document
@@ -24,7 +24,7 @@ Initialize R session by deleting existing R objects.
 rm(list = ls())
 ```
 
-Load R libraries needed to anlayze microarray data and visualize results.
+Load R libraries needed to analyze microarray data and visualize results.
 
 ```{r message = FALSE}
 library(affy)
@@ -84,25 +84,25 @@ for(i in 1:(length(name_change)/2)) {
 hoeflich_2009$cellLine <- pd$cellLine
 ```
 
-Load a list of samples analyzed in Finn et al. 2009,
+Load the list of samples analyzed in Finn et al. 2009.
 ```{r}
 finn_2009 <- read.table("Finn_2009.txt", header = TRUE, sep = "\t")
 ```
-in which there are `r nrow(finn_2009)` subtypes. Unfortunately, their gene expression data is not publically available.
+The list includes `r nrow(finn_2009)` subtypes. Unfortunately, their gene expression data is not publically available.
 
 Identify and use the cell lines available from Hoeflich et al. 2009 that match Finn et al. 2009. 
 ```{r}
 selected_cols <- which(pd$cellLine %in% finn_2009$cellLine)
 hoeflich_2009 <- hoeflich_2009[,selected_cols]
 ```
-There are `r ncol(hoeflich_2009)` subtypes common to both Hoeflich et al. 2009 and Finn et al. 2009, which we will use in our analysis of identifying gene signature resistant to CDK4/6 inhibitor (e.g. PD 0332991).
+There are `r ncol(hoeflich_2009)` subtypes common to both Hoeflich et al. 2009 and Finn et al. 2009, which we will use in our analysis to identify gene signatures resistant to CDK4/6 inhibitor (e.g. PD 0332991).
 
-The following box plot shows the distribution of expression values across those `r ncol(hoeflich_2009)` subtypes.
+The following box plot shows the distribution of gene expression values across those `r ncol(hoeflich_2009)` subtypes.
 ```{r}
 boxplot(log2(exprs(hoeflich_2009)), col="red", las=2)
 ```
 
-The following MVA plot shows M (log ratio) as Y axis and A (mean average) as X axis of a pair of gene expression values (a, b) for each pair of four samples. A is defined as (log(a) + log(b)) / 2 and M is defined as log(a) - log(b).
+The following MVA plot shows M (log ratio) on Y axis and A (mean average) on X axis for a pair of gene expression values (a, b) for each pair of four samples. A is defined as (log(a) + log(b)) / 2 and M is defined as log(a) - log(b).
 ```{r}
 mva.pairs(exprs(hoeflich_2009)[,1:4], plot.method="smoothScatter")
 ```
@@ -127,7 +127,7 @@ geneSymbol <- locus2gene$`Gene Symbol`
 h2009_exprs <- cbind(geneSymbol, h2009_exprs)
 ```
 
-Show gene expression values of four samples at WFDC2 and MAPK1.
+Before the groups are combined, the following table shows gene expression values of four samples at WFDC2 and MAPK1, for example.
 ```{r}
 with(h2009_exprs, {
   h2009_exprs[geneSymbol == 'WFDC2' | geneSymbol == 'MAPK1', 1:5]
@@ -146,7 +146,7 @@ h2009_exprs <- h2009_exprs[,-1]
 h2009_exprs[c("WFDC2", "MAPK1"), 1:4]
 ```
 
-Transform gene expression values (1 to `r as.integer(2^16 - 1)`) to log scale (0 to 16).
+Transform the gene expression values (1 to `r as.integer(2^16 - 1)`) to a log scale (0 to 16).
 ```{r}
 h2009_exprs <- log2(h2009_exprs)
 ```
@@ -162,7 +162,7 @@ h2009_pd <- pData(hoeflich_2009)
 finn_2009 <- merge(finn_2009, h2009_pd[, c("geo_accession", "cellLine")])
 ```
 
-Finn et al. 2009's data used in the analysis:
+The list of samples analyzed in Finn et al. 2009 are:
 ```{r echo = FALSE}
 finn_2009[order(finn_2009$IC50),]
 ```
@@ -171,7 +171,7 @@ finn_2009[order(finn_2009$IC50),]
 finn_2009 <- finn_2009[order(finn_2009$geo_accession),]
 ```
 
-Identify genes that are differentially expressed either positively or negatively across `r nrow(finn_2009)` breast cancer subtypes.
+Identify genes that are differentially expressed either positively or negatively across `r nrow(finn_2009)` breast cancer subtypes according to IC50 values.
 ```{r}
 gene_names <- rownames(h2009_exprs)
 
@@ -186,7 +186,7 @@ cor_table[,2] <- apply(h2009_exprs, 1, function(x) cor(x, logIC50, method="pears
 cor_order <- order(cor_table$cor)
 ```
 
-Histogram of correlation values between IC50 and gene expression.
+The following is a histogram of correlation values between IC50 and gene expression.
 ```{r}
 hist(cor_table[,2])
 ```
@@ -201,7 +201,7 @@ plot(x=logIC50, y=h2009_exprs[most_neg_i,], xlab="IC50 (log)", ylab="Gene Expres
 abline(lm(t(h2009_exprs[most_neg_i,]) ~ logIC50))
 ```
 
-Show a heapmap.
+The following shows a heatmap.
 
 ```{r eval}
 pos_th <- quantile(cor_table$cor, 0.999)
@@ -242,7 +242,7 @@ predict(rsig, samples[-train,])
 # Supplementary Materials
 
 A comprehensive tutorial for analysis of microarray data is available at http://bioinformatics-core-shared-training.github.io/microarray-analysis/
-A tutorial for random forest is available at https://www.r-bloggers.com/random-forests-in-r/
+A tutorial for using random forest is available at https://www.r-bloggers.com/random-forests-in-r/
 
 Additional codes:
 ```{r eval = FALSE}
