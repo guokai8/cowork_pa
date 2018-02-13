@@ -9,11 +9,11 @@ output: html_document
 
 Steps involved in discovery of new drugs that reverse CDK4/6 inhibitor resistance:
 
-(1) Develop CDK4/6 inhibitor resistance signature 
+(1) Develop CDK4/6 inhibitor resistance signature.
 
-(2) Screen published databases to identify drugs that reverse the signature identified in step 1 (identical to Nature Communications paper we discussed) 
+(2) Screen published databases to identify drugs that reverse the signature identified in step 1 (identical to Chen et al. 2017).
 
-(3) Validate findings from step 2 in the lab 
+(3) Validate findings from step 2 in the lab. 
 
 
 # Initialization
@@ -99,12 +99,14 @@ There are `r ncol(hoeflich_2009)` subtypes common to both Hoeflich et al. 2009 a
 
 The following box plot shows the distribution of gene expression values across those `r ncol(hoeflich_2009)` subtypes.
 ```{r}
-boxplot(log2(exprs(hoeflich_2009)), col="red", las=2)
+boxplot(log2(exprs(hoeflich_2009)), col="red", las=2, names=hoeflich_2009$cellLine, cex.axis=0.8)
 ```
 
 The following MVA plot shows M (log ratio) on Y axis and A (mean average) on X axis for a pair of gene expression values (a, b) for each pair of four samples. A is defined as (log(a) + log(b)) / 2 and M is defined as log(a) - log(b).
 ```{r}
-mva.pairs(exprs(hoeflich_2009)[,1:4], plot.method="smoothScatter")
+tmp_exprs <- exprs(hoeflich_2009)
+colnames(tmp_exprs) <- hoeflich_2009$cellLine
+mva.pairs(tmp_exprs[, 1:4], plot.method="smoothScatter", cex=1.2)
 ```
 
 ```{r}
@@ -124,10 +126,11 @@ h2009_exprs <- as.data.frame(exprs(hoeflich_2009))
 locus2gene <- fData(hoeflich_2009)[c("ID", "Gene Symbol")]
 stopifnot(rownames(h2009_exprs) == locus2gene$ID)
 geneSymbol <- locus2gene$`Gene Symbol`
+geneSymbol <- gsub(" ///.*", "", geneSymbol)
 h2009_exprs <- cbind(geneSymbol, h2009_exprs)
 ```
 
-Before the groups are combined, the following table shows gene expression values of four samples at WFDC2 and MAPK1, for example.
+Before gene expression values are combined, the following table shows gene expression values of four samples at WFDC2 and MAPK1, for example.
 ```{r}
 with(h2009_exprs, {
   h2009_exprs[geneSymbol == 'WFDC2' | geneSymbol == 'MAPK1', 1:5]
@@ -151,7 +154,7 @@ Transform the gene expression values (1 to `r as.integer(2^16 - 1)`) to a log sc
 h2009_exprs <- log2(h2009_exprs)
 ```
 
-For example, the log transformed gene expression values at **MAPK1** are as follows:
+For example, the log transformed gene expression values at MAPK1 are as follows:
 ```{r echo = FALSE}
 h2009_exprs["MAPK1",1:4]
 ```
@@ -201,7 +204,7 @@ plot(x=logIC50, y=h2009_exprs[most_neg_i,], xlab="IC50 (log)", ylab="Gene Expres
 abline(lm(t(h2009_exprs[most_neg_i,]) ~ logIC50))
 ```
 
-The following shows a heatmap.
+The following shows a heatmap based on the top 0.1% most positively and negatively correlated genes.
 
 ```{r eval}
 pos_th <- quantile(cor_table$cor, 0.999)
@@ -225,23 +228,30 @@ samples <- t(diff_exprs)
 stopifnot(rownames(samples) == finn_2009$cellLine)
 samples <- cbind(samples, finn_2009$IC50)
 colnames(samples)[ncol(samples)] <- "IC50"
-colnames(samples) <- gsub(" ///.*", "", colnames(samples))
 train <- sample(1:nrow(samples), nrow(samples) - 5)
 rsig <- randomForest(IC50 ~ ., data = samples, subset = train, ntree = 1000)
 print(rsig)
 plot(rsig)
 # print(importance(rsig, type = 2))
 print("True IC50 values:")
-samples[-train,"IC50"]
+samples[-train, "IC50"]
 print("Predicted IC50 values:")
 predict(rsig, samples[-train,])
 ```
 
-#
+Load Library of Integrated Network-based Cellular Signatures (LINCS) database downloaded from 
+http://lincs.hms.harvard.edu/
+```{r}
+```
+
+Calcuate Reverse Gene Expression Score (RGES) in Chen et al. 2017.
+```{r}
+```
 
 # Supplementary Materials
 
 A comprehensive tutorial for analysis of microarray data is available at http://bioinformatics-core-shared-training.github.io/microarray-analysis/
+
 A tutorial for using random forest is available at https://www.r-bloggers.com/random-forests-in-r/
 
 Additional codes:
