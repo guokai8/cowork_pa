@@ -1,8 +1,20 @@
 ---
-title: "Identification of Gene Signature of Breast Cancer Subtypes resistant to CDK4/6 inhibitors"
+title: "Identification of Gene Signature of Breast Cancer Subtypes Resistant to CDK4/6 Inhibitors"
 author: "Daehwan Kim and Prasanna Alluri"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: html_document
 ---
+
+# Outline
+
+Steps involved in discovery of new drugs that reverse CDK4/6 inhibitor resistance:
+
+(1) Develop CDK4/6 inhibitor resistance signature 
+
+(2) Screen published databases to identify drugs that reverse the signature identified in step 1 (identical to Nature Communications paper we discussed) 
+
+(3) Validate findings from step 2 in the lab 
+
 
 # Initialization
 
@@ -10,9 +22,6 @@ Initialize R session by deleting existing R objects.
 
 ```{r}
 rm(list = ls())
-
-# date: '`r format(Sys.Date(), "%B %d, %Y")`'
-
 ```
 
 Load R libraries needed to anlayze microarray data and visualize results.
@@ -75,21 +84,31 @@ for(i in 1:(length(name_change)/2)) {
 hoeflich_2009$cellLine <- pd$cellLine
 ```
 
-Load a list of samples analyzed in Finn et al. 2009 - their gene expression data is not publically available.
+Load a list of samples analyzed in Finn et al. 2009,
 ```{r}
 finn_2009 <- read.table("Finn_2009.txt", header = TRUE, sep = "\t")
 ```
-in which there are `r nrow(finn_2009)` subtypes.
+in which there are `r nrow(finn_2009)` subtypes. Unfortunately, their gene expression data is not publically available.
 
-Identify and use the cell lines from Hoeflich et al. 2009 that match Finn et al. 2009. 
+Identify and use the cell lines available from Hoeflich et al. 2009 that match Finn et al. 2009. 
 ```{r}
 selected_cols <- which(pd$cellLine %in% finn_2009$cellLine)
 hoeflich_2009 <- hoeflich_2009[,selected_cols]
 ```
-Now, there are `r ncol(hoeflich_2009)` subtypes common to both Hoeflich et al. 2009 and Finn et al. 2009
+There are `r ncol(hoeflich_2009)` subtypes common to both Hoeflich et al. 2009 and Finn et al. 2009, which we will use in our analysis of identifying gene signature resistant to CDK4/6 inhibitor (e.g. PD 0332991).
+
+The following box plot shows the distribution of expression values across those `r ncol(hoeflich_2009)` subtypes.
+```{r}
+boxplot(log2(exprs(hoeflich_2009)), col="red", las=2)
+```
+
+The following MVA plot shows M (log ratio) as Y axis and A (mean average) as X axis of a pair of gene expression values (a, b) for each pair of four samples. A is defined as (log(a) + log(b)) / 2 and M is defined as log(a) - log(b).
+```{r}
+mva.pairs(exprs(hoeflich_2009)[,1:4], plot.method="smoothScatter")
+```
 
 ```{r}
-#Show images of gene expression values
+# Show images of gene expression values - it doesn't work now.
 if(FALSE) {
 ncol <- (ncol(hoeflich_2009) + 3) / 4
 par(mfrow=c(4,ncol))
@@ -167,7 +186,7 @@ cor_table[,2] <- apply(h2009_exprs, 1, function(x) cor(x, logIC50, method="pears
 cor_order <- order(cor_table$cor)
 ```
 
-Histogram of correlation between IC50 and gene expression 
+Histogram of correlation values between IC50 and gene expression.
 ```{r}
 hist(cor_table[,2])
 ```
@@ -197,21 +216,42 @@ diff_exprs <- as.matrix(h2009_exprs[diff_rows,])
 colnames(diff_exprs) <- finn_2009$cellLine
 heatmap(diff_exprs)
 
-finn_2009[order(finn_2009$IC50), c("cellLine", "IC50")]
+finn_2009[order(finn_2009$IC50), "cellLine"]
 ```
+
+Create resistance signature (R-Sig) to mimic M-Sig developed in Zhao et al. 2015 using a random forest of 1,000 trees.
+```{r}
+samples <- t(diff_exprs)
+stopifnot(rownames(samples) == finn_2009$cellLine)
+samples <- cbind(samples, finn_2009$IC50)
+colnames(samples)[ncol(samples)] <- "IC50"
+colnames(samples) <- gsub(" ///.*", "", colnames(samples))
+train <- sample(1:nrow(samples), nrow(samples) - 5)
+rsig <- randomForest(IC50 ~ ., data = samples, subset = train, ntree = 1000)
+print(rsig)
+plot(rsig)
+# print(importance(rsig, type = 2))
+print("True IC50 values:")
+samples[-train,"IC50"]
+print("Predicted IC50 values:")
+predict(rsig, samples[-train,])
+```
+
+#
+
+# Supplementary Materials
+
+A comprehensive tutorial for analysis of microarray data is available at http://bioinformatics-core-shared-training.github.io/microarray-analysis/
+A tutorial for random forest is available at https://www.r-bloggers.com/random-forests-in-r/
 
 Additional codes:
 ```{r eval = FALSE}
-# mva.pairs(exprs(raw)[,1:4], log.it = TRUE)
-
 # raw <- varFilter(raw)
 
 # features[grep("TP53", features$`Gene Symbol`),]
 # features[which(features$`Gene Symbol` == "TP53"),]
 # features[match("TP53", features$`Gene Symbol`),]
 # which(features$`Gene Symbol` == "TP53")
-
-boxplot(exprs(raw))
 
 # Calcuate Euclidean distances among samples
 euc.dist <- dist(t(exprs(raw)))
