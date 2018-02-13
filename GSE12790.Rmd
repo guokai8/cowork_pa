@@ -1,19 +1,21 @@
 ---
 title: "Identification of Gene Signature of Breast Cancer Subtypes resistant to CDK4/6 inhibitors"
 author: "Daehwan Kim and Prasanna Alluri"
-date: "Feburary 11, 2018"
 output: html_document
 ---
 
 # Initialization
 
-Delete R objects
+Initialize R session by deleting existing R objects.
 
 ```{r}
 rm(list = ls())
+
+# date: '`r format(Sys.Date(), "%B %d, %Y")`'
+
 ```
 
-Load R libraries
+Load R libraries needed to anlayze microarray data and visualize results.
 
 ```{r message = FALSE}
 library(affy)
@@ -21,15 +23,16 @@ library(affyPLM)
 library(GEOquery)
 library(genefilter)
 library(cluster)
+library(randomForest)
 # library(WGCNA)
 ```
 
-Define utility functions
+Define utility functions.
 ```{r}
 printf <- function(...) print(sprintf(...))
 ```
 
-Load gene expression data (microarray) under GSE12790. The data is already included in the Git repository (https://github.com/infphilo/cowork_pa), so there is no need to download the data.
+Load gene expression data (microarray) under GSE12790, which is already included in the Git repository (https://github.com/infphilo/cowork_pa).
 ```{r message = FALSE, warning=FALSE}
 geo_fname <- "GSE12790_series_matrix.txt.gz"
 remote_fname <- paste("ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE12nnn/GSE12790/matrix/", geo_fname, sep="")
@@ -72,92 +75,143 @@ for(i in 1:(length(name_change)/2)) {
 hoeflich_2009$cellLine <- pd$cellLine
 ```
 
-Identify and use the cell lines from Hoeflich et al. 2009 that match Finn et al. 2009
+Load a list of samples analyzed in Finn et al. 2009 - their gene expression data is not publically available.
 ```{r}
 finn_2009 <- read.table("Finn_2009.txt", header = TRUE, sep = "\t")
+```
+in which there are `r nrow(finn_2009)` subtypes.
+
+Identify and use the cell lines from Hoeflich et al. 2009 that match Finn et al. 2009. 
+```{r}
 selected_cols <- which(pd$cellLine %in% finn_2009$cellLine)
 hoeflich_2009 <- hoeflich_2009[,selected_cols]
 ```
+Now, there are `r ncol(hoeflich_2009)` subtypes common to both Hoeflich et al. 2009 and Finn et al. 2009
 
-Transform gene expression (1 to `r as.integer(2^16 - 1)`) to log scale (0 to 16).
-For example, gene expression values at `r ` are as follows.
-```{r echo = FALSE}
-exprs(hoeflich_2009)[1,]
+```{r}
+#Show images of gene expression values
+if(FALSE) {
+ncol <- (ncol(hoeflich_2009) + 3) / 4
+par(mfrow=c(4,ncol))
+for(i in 1:ncol(hoeflich_2009)) {
+  image(log2(exprs(hoeflich_2009[,i])))
+}
+}
+```
+
+Combine loci into groups that correspond to genes.
+```{r}
+h2009_exprs <- as.data.frame(exprs(hoeflich_2009))
+locus2gene <- fData(hoeflich_2009)[c("ID", "Gene Symbol")]
+stopifnot(rownames(h2009_exprs) == locus2gene$ID)
+geneSymbol <- locus2gene$`Gene Symbol`
+h2009_exprs <- cbind(geneSymbol, h2009_exprs)
+```
+
+Show gene expression values of four samples at WFDC2 and MAPK1.
+```{r}
+with(h2009_exprs, {
+  h2009_exprs[geneSymbol == 'WFDC2' | geneSymbol == 'MAPK1', 1:5]
+})
+```
+
+Merge gene expression values that belong to the same gene by the mean of the values.
+
+```{r}
+h2009_exprs <- aggregate(h2009_exprs[,2:ncol(h2009_exprs)], by = list(geneSymbol), FUN = mean)
+rownames(h2009_exprs) <- h2009_exprs[,1]
+h2009_exprs <- h2009_exprs[,-1]
 ```
 
 ```{r}
-exprs(hoeflich_2009) <- log2(exprs(hoeflich_2009))
+h2009_exprs[c("WFDC2", "MAPK1"), 1:4]
 ```
-The log transformed gene expression values are:
-`r exprs(hoeflich_2009)[1,]`
+
+Transform gene expression values (1 to `r as.integer(2^16 - 1)`) to log scale (0 to 16).
+```{r}
+h2009_exprs <- log2(h2009_exprs)
+```
+
+For example, the log transformed gene expression values at **MAPK1** are as follows:
+```{r echo = FALSE}
+h2009_exprs["MAPK1",1:4]
+```
 
 Add GEO ID to Finn et al. 2009 data.
 ```{r}
 h2009_pd <- pData(hoeflich_2009)
-# DK - there might be a better way to merge two data frames??
-geo_subtype <- h2009_pd[, c("geo_accession", "cellLine")]
-rownames(geo_subtype) <- NULL
-finn_2009 <- merge(finn_2009, geo_subtype)
+finn_2009 <- merge(finn_2009, h2009_pd[, c("geo_accession", "cellLine")])
+```
+
+Finn et al. 2009's data used in the analysis:
+```{r echo = FALSE}
+finn_2009[order(finn_2009$IC50),]
+```
+
+```{r echo = FALSE}
 finn_2009 <- finn_2009[order(finn_2009$geo_accession),]
 ```
 
 Identify genes that are differentially expressed either positively or negatively across `r nrow(finn_2009)` breast cancer subtypes.
-```{r eval = FALSE}
-h2009_exprs <- exprs(hoeflich_2009)
-locus_names <- rownames(h2009_exprs)
+```{r}
+gene_names <- rownames(h2009_exprs)
 
 stopifnot(finn_2009$geo_accession == colnames(h2009_exprs))
-ic50s <- finn_2009$IC50
-corr_table <- data.frame(matrix(nrow=nrow(h2009_exprs), ncol=2))
-colnames(corr_table) <- c("locus", "corr")
-for(i in 1:nrow(h2009_exprs)) {
-  # Calculate correlation
-  gene_exprs <- as.numeric(h2009_exprs[i,])
-  corr_table[i, 1] = locus_names[i]
-  corr_table[i, 2] = cor(ic50s, gene_exprs, method="pearson")
-  if(i %% 1000 == 0) {
-    printf("Calculated correlation values of %d loci", i)
-  }
-}
+IC50 <- finn_2009$IC50
+logIC50 <- log(IC50)
+cor_table <- data.frame(matrix(nrow=nrow(h2009_exprs), ncol=2))
+colnames(cor_table) <- c("locus", "cor")
 
-corr_table <- corr_table[order(corr_table$corr),]
-head(corr_table)
-tail(corr_table)
-hist(corr_table[,2])
+cor_table[,1] <- gene_names
+cor_table[,2] <- apply(h2009_exprs, 1, function(x) cor(x, logIC50, method="pearson"))
+cor_order <- order(cor_table$cor)
+```
+
+Histogram of correlation between IC50 and gene expression 
+```{r}
+hist(cor_table[,2])
+```
+
+```{r}
+gene_names <- rownames(h2009_exprs)
+most_pos_i <- cor_order[length(cor_order)]
+plot(x=logIC50, y=h2009_exprs[most_pos_i,], xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most positively correlated at",gene_names[most_pos_i]))
+abline(lm(t(h2009_exprs[most_pos_i,]) ~ logIC50))
+most_neg_i <- cor_order[1]
+plot(x=logIC50, y=h2009_exprs[most_neg_i,], xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most negatively correlated at",gene_names[most_neg_i]))
+abline(lm(t(h2009_exprs[most_neg_i,]) ~ logIC50))
+```
+
+Show a heapmap.
+
+```{r eval}
+pos_th <- quantile(cor_table$cor, 0.999)
+neg_th <- quantile(cor_table$cor, 0.001)
+
+pos_rows <- which(cor_table$cor >= pos_th)
+neg_rows <- which(cor_table$cor <= neg_th)
+diff_rows <- c(pos_rows, neg_rows)
+
+# Differentially expressed genes
+diff_exprs <- as.matrix(h2009_exprs[diff_rows,])
+colnames(diff_exprs) <- finn_2009$cellLine
+heatmap(diff_exprs)
+
+finn_2009[order(finn_2009$IC50), c("cellLine", "IC50")]
 ```
 
 Additional codes:
 ```{r eval = FALSE}
-# raw
-# exprs(raw)[1:5,1:5]
-# summary(exprs(raw)[,1:5])
 # mva.pairs(exprs(raw)[,1:4], log.it = TRUE)
 
-# dim(raw)
 # raw <- varFilter(raw)
-# dim(raw)
 
-# features
-features <- fData(raw)
-stopifnot(all(rownames(features) == rownames(exprs(raw))))
-
-# colnames(fData(raw))
 # features[grep("TP53", features$`Gene Symbol`),]
 # features[which(features$`Gene Symbol` == "TP53"),]
 # features[match("TP53", features$`Gene Symbol`),]
 # which(features$`Gene Symbol` == "TP53")
 
 boxplot(exprs(raw))
-
-E <- log2(exprs(raw))
-par(mfrow=c(1,2))
-plot(E[1274,], xlab="Array Index ",
-     col="steelblue",pch=16,
-     ylab="Normalised Expression",main=rownames(E)[1274])
-plot(E[10723,], xlab="Array Index ",
-     col="steelblue",pch=16,
-     ylab="Normalised Expression",main=rownames(E)[10723])
-cor(E[1274,],E[10723,], use = "complete.obs")
 
 # Calcuate Euclidean distances among samples
 euc.dist <- dist(t(exprs(raw)))

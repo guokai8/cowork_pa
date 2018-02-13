@@ -1,4 +1,4 @@
-Cell line	IC50value (nM)	Breast cancer subtype	ER status	HER2 status
+cellLine	IC50	breastCancerSubtype	ERStatus	HER2Status
 MDA-MB-175	4	Luminal	Positive	Normal
 ZR-75-30	5	Luminal	Positive	Amplified
 CAMA-1	8	Luminal	Positive	Normal
