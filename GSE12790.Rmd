@@ -3,6 +3,7 @@ title: "Identification of Gene Signatures of Breast Cancer Subtypes Resistant to
 author: "Daehwan Kim and Prasanna Alluri"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: html_document
+bibliography: bibliography.bib
 ---
 
 # Outline
@@ -41,7 +42,7 @@ Define utility functions.
 printf <- function(...) print(sprintf(...))
 ```
 
-Load gene expression data (microarray) under GSE12790, which is already included in the Git repository (https://github.com/infphilo/cowork_pa).
+Load gene expression data (microarray) under GSE12790, which is already included in our GitHub repository (https://github.com/infphilo/cowork_pa).
 ```{r message = FALSE, warning=FALSE}
 geo_fname <- "GSE12790_series_matrix.txt.gz"
 remote_fname <- paste("ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE12nnn/GSE12790/matrix/", geo_fname, sep="")
@@ -49,7 +50,7 @@ if(!file.exists(geo_fname)) download.file(remotefile, geo_fname)
 hoeflich_2009 <- getGEO(filename=geo_fname)
 ```
 
-Change the names of cell subtypes so that they match those of Finn et al. 2009
+Change the names of cell subtypes so that they match those of @finn2009
 ```{r}
 pd <- pData(hoeflich_2009) # phenotype data
 pd$cellLine <- gsub("MCF10a_Null_Vector_rep1", "MCF-10A", pd$title)
@@ -84,18 +85,18 @@ for(i in 1:(length(name_change)/2)) {
 hoeflich_2009$cellLine <- pd$cellLine
 ```
 
-Load the list of samples analyzed in Finn et al. 2009.
+Load the list of samples analyzed in @finn2009.
 ```{r}
 finn_2009 <- read.table("Finn_2009.txt", header = TRUE, sep = "\t")
 ```
 The list includes `r nrow(finn_2009)` subtypes. Unfortunately, their gene expression data is not publically available.
 
-Identify and use the cell lines available from Hoeflich et al. 2009 that match Finn et al. 2009. 
+Identify and use the cell lines available from @hoeflich2009 that match @finn2009. 
 ```{r}
 selected_cols <- which(pd$cellLine %in% finn_2009$cellLine)
 hoeflich_2009 <- hoeflich_2009[,selected_cols]
 ```
-There are `r ncol(hoeflich_2009)` subtypes common to both Hoeflich et al. 2009 and Finn et al. 2009, which we will use in our analysis to identify gene signatures resistant to CDK4/6 inhibitor (e.g. PD 0332991).
+There are `r ncol(hoeflich_2009)` subtypes common to both @hoeflich2009 and @finn2009, which we will use in our analysis to identify gene signatures resistant to CDK4/6 inhibitor (e.g. PD 0332991).
 
 The following box plot shows the distribution of gene expression values across those `r ncol(hoeflich_2009)` subtypes.
 ```{r}
@@ -149,7 +150,7 @@ h2009_exprs <- h2009_exprs[,-1]
 h2009_exprs[c("WFDC2", "MAPK1"), 1:4]
 ```
 
-Transform the gene expression values (1 to `r as.integer(2^16 - 1)`) to a log scale (0 to 16).
+Transform the gene expression values (`r min(h2009_exprs)` to `r format(max(h2009_exprs), digits=5)`) to a log scale (`r log2(min(h2009_exprs))` to `r log2(max(h2009_exprs))`).
 ```{r}
 h2009_exprs <- log2(h2009_exprs)
 ```
@@ -159,13 +160,13 @@ For example, the log transformed gene expression values at MAPK1 are as follows:
 h2009_exprs["MAPK1",1:4]
 ```
 
-Add GEO ID to Finn et al. 2009 data.
+Add GEO ID to @finn2009 data.
 ```{r}
 h2009_pd <- pData(hoeflich_2009)
 finn_2009 <- merge(finn_2009, h2009_pd[, c("geo_accession", "cellLine")])
 ```
 
-The list of samples analyzed in Finn et al. 2009 are:
+The list of samples analyzed in @finn2009 are:
 ```{r echo = FALSE}
 finn_2009[order(finn_2009$IC50),]
 ```
@@ -181,7 +182,7 @@ gene_names <- rownames(h2009_exprs)
 stopifnot(finn_2009$geo_accession == colnames(h2009_exprs))
 IC50 <- finn_2009$IC50
 logIC50 <- log(IC50)
-cor_table <- data.frame(matrix(nrow=nrow(h2009_exprs), ncol=2))
+cor_table <- data.frame(matrix(nrow=length(gene_names), ncol=2))
 colnames(cor_table) <- c("locus", "cor")
 
 cor_table[,1] <- gene_names
@@ -197,10 +198,10 @@ hist(cor_table[,2])
 ```{r}
 gene_names <- rownames(h2009_exprs)
 most_pos_i <- cor_order[length(cor_order)]
-plot(x=logIC50, y=h2009_exprs[most_pos_i,], xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most positively correlated at",gene_names[most_pos_i]))
+plot(x=logIC50, y=h2009_exprs[most_pos_i,], xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most positively correlated at", gene_names[most_pos_i]))
 abline(lm(t(h2009_exprs[most_pos_i,]) ~ logIC50))
 most_neg_i <- cor_order[1]
-plot(x=logIC50, y=h2009_exprs[most_neg_i,], xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most negatively correlated at",gene_names[most_neg_i]))
+plot(x=logIC50, y=h2009_exprs[most_neg_i,], xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most negatively correlated at", gene_names[most_neg_i]))
 abline(lm(t(h2009_exprs[most_neg_i,]) ~ logIC50))
 ```
 
@@ -222,7 +223,7 @@ heatmap(diff_exprs)
 finn_2009[order(finn_2009$IC50), "cellLine"]
 ```
 
-Create resistance signature (R-Sig) to mimic M-Sig developed in Zhao et al. 2015 using a random forest of 1,000 trees.
+Create Resistance Signature (R-Sig) to mimic Metastasis Signature (M-Sig) developed in @zhao2015 using a random forest of 1,000 trees.
 ```{r}
 samples <- t(diff_exprs)
 stopifnot(rownames(samples) == finn_2009$cellLine)
@@ -233,19 +234,224 @@ rsig <- randomForest(IC50 ~ ., data = samples, subset = train, ntree = 1000)
 print(rsig)
 plot(rsig)
 # print(importance(rsig, type = 2))
-print("True IC50 values:")
+```
+
+True IC50 values:
+```{r}
 samples[-train, "IC50"]
-print("Predicted IC50 values:")
+```
+
+Predicted IC50 values:
+```{r}
 predict(rsig, samples[-train,])
 ```
 
 Load Library of Integrated Network-based Cellular Signatures (LINCS) database downloaded from 
-http://lincs.hms.harvard.edu/
+http://lincs.hms.harvard.edu/. R data files such as *lincs_signatures_cmpd_landmark.RData* and *lincs_sig_info.csv* are downloaded from @chen2017. The following code is taken from @chen2017 (https://github.com/Bin-Chen-Lab/RGES) and modified.
 ```{r}
+load("lincs_signatures_cmpd_landmark.RData")
+lincs_sig_info <- read.csv("lincs_sig_info.csv")
+lincs_sig_info <- subset(lincs_sig_info, id %in% colnames(lincs_signatures))
+lincs_sig_info <- lincs_sig_info[!duplicated(lincs_sig_info$id),]
+
+lincs_gene_info <- read.csv("lincs_landmark.csv")
+stopifnot(rownames(lincs_signatures) == lincs_gene_info$gene_id)
+rownames(lincs_signatures) <- lincs_gene_info$gene_symbol
 ```
 
-Calcuate Reverse Gene Expression Score (RGES) in Chen et al. 2017.
+LINCS contains expression changes of `r nrow(lincs_signatures)` genes across `r ncol(lincs_signatures)` perturbations in which there are `r length(unique(lincs_sig_info$pert_iname))` unique compounds, so the dimension of matrix is `r nrow(lincs_signatures)` x `r ncol(lincs_signatures)`. For example, the following table shows expression changes of 10 genes across 5 perturbations.
+
 ```{r}
+lincs_signatures[1:10,1:5]
+```
+
+The following table shows related information:
+```{r}
+lincs_sig_info[lincs_sig_info$id %in% colnames(lincs_signatures)[1:5],]
+```
+
+```{r}
+pos_th <- quantile(cor_table$cor, 0.99)
+neg_th <- quantile(cor_table$cor, 0.01)
+pos_rows <- which(cor_table$cor >= pos_th)
+neg_rows <- which(cor_table$cor <= neg_th)
+
+lincs_signatures_pos <- lincs_signatures[rownames(lincs_signatures) %in% gene_names[pos_rows],]
+lincs_signatures_neg <- lincs_signatures[rownames(lincs_signatures) %in% gene_names[neg_rows],]
+```
+The number of genes that match positively and negatively correlated genes to IC50 values are `r nrow(lincs_signatures_pos)` and `r nrow(lincs_signatures_neg)`, respectively.
+
+Calculate Reverse Gene Expression Score (RGES) developed by Chen et al. 2017.
+```{r}
+# 
+cmap_score <- function(sig_up, sig_down, drug_signature) {
+  num_genes <- nrow(drug_signature)
+
+  up_tags_rank <- merge(drug_signature, sig_up, by.x = "id", by.y = 1)
+  down_tags_rank <- merge(drug_signature, sig_down, by.x = "id", by.y = 1)
+  
+  up_tags_position <- sort(up_tags_rank$rank)
+  down_tags_position <- sort(down_tags_rank$rank)
+  
+  num_tags_up <- length(up_tags_position)
+  num_tags_down <- length(down_tags_position)
+  
+  ks_up <- 0
+  if(num_tags_up > 1) {
+    a_up <- max(sapply(1:num_tags_up, function(j) j / num_tags_up - up_tags_position[j] / num_genes))
+    b_up <- max(sapply(1:num_tags_up, function(j) up_tags_position[j] / num_genes - (j-1) / num_tags_up))
+    
+    if(a_up > b_up) {
+      ks_up <- a_up
+    } else {
+      ks_up <- -b_up
+    }
+  }
+  
+  ks_down <- 0
+  if(num_tags_down > 1) {
+    a_down <- max(sapply(1:num_tags_down, function(j) j / num_tags_down - down_tags_position [j] / num_genes))
+    b_down <- max(sapply(1:num_tags_down, function(j) down_tags_position[j] / num_genes - (j-1) / num_tags_down))
+    
+    if(a_down > b_down) {
+      ks_down <- a_down
+    } else {
+      ks_down <- -b_down
+    }
+  }
+  
+  connectivity_score <- ks_up - ks_down
+  return(connectivity_score)
+}
+
+getsRGES <- function(RGES, cor, pert_dose, pert_time, diff, max_cor) {
+  sRGES <- RGES
+  pert_time <- ifelse(pert_time < 24, "short", "long")
+  pert_dose <- ifelse(pert_dose < 10, "low", "high")
+  if(pert_time == "short" & pert_dose == "low") {
+    sRGES <- sRGES + diff[4]
+  }
+  if(pert_dose ==  "low" & pert_time == "long") {
+    sRGES <- sRGES + diff[2]
+  }
+  if(pert_dose ==  "high" & pert_time == "short") {
+    sRGES <- sRGES + diff[1]
+  }
+  return(sRGES * cor/max_cor) #
+}
+
+exp_ids <- lincs_sig_info$id[1:5000]
+# exp_ids <- lincs_sig_info$id
+gene_list <- rownames(lincs_signatures)
+
+dz_genes_up <- gene_names[pos_rows]
+dz_genes_down <- gene_names[neg_rows]
+
+cmap_scores <- data.frame(matrix(nrow=length(exp_ids), ncol=2))
+colnames(cmap_scores) <- c("exp_id", "score")
+cmap_scores$exp_id <- exp_ids
+for (i in 1:nrow(cmap_scores)) {
+  exp_id <- cmap_scores[i,"exp_id"]
+  cmap_exp_signature <- data.frame(gene_list,  rank(-1 * lincs_signatures[, as.character(exp_id)], ties.method="random"))
+  colnames(cmap_exp_signature) <- c("id", "rank")
+  cmap_scores[i, "score"] <- cmap_score(dz_genes_up, dz_genes_down, cmap_exp_signature)
+}
+
+cmap_score_info <- merge(cmap_scores, lincs_sig_info, by.x = "exp_id", by.y = "id")
+cmap_score_info <- cmap_score_info[order(cmap_score_info$score),]
+print("Top 50 perturbagen candidates:")
+print(cmap_score_info[1:50,])
+print("CMAP scores related to Palbociclib:")
+print(cmap_score_info[cmap_score_info$exp_id %in% lincs_sig_info[lincs_sig_info$pert_iname == "palbociclib","id"],])
+```
+
+```{r eval=FALSE}
+#random scores
+N_PERMUTATIONS <- 10000 #default 100000
+random_sig_ids <- sample(1:ncol(lincs_signatures),N_PERMUTATIONS,replace=T)
+count <- 0
+random_cmap_scores <- NULL
+for (expr_id in random_sig_ids){
+  count <- count + 1
+  # print(count)
+  if (landmark ==1){
+    cmap_exp_signature <- data.frame(gene.list,  rank(-1 * lincs_signatures[, as.character(exp_id)], ties.method="random"))    
+  }else{
+    cmap_exp_signature <- cbind(gene.list,  get.sigs(exp_id))    
+  }
+  colnames(cmap_exp_signature) <- c("ids","rank")
+  
+  random_input_signature_genes <- sample(gene.list, (nrow(dz_genes_up)+nrow(dz_genes_down)))
+  rand_dz_gene_up <- data.frame(GeneID=random_input_signature_genes[1:nrow(dz_genes_up)])
+  rand_dz_gene_down <- data.frame(GeneID=random_input_signature_genes[(nrow(dz_genes_up)+1):length(random_input_signature_genes)])
+  random_cmap_scores <- c(random_cmap_scores, cmap_score_new(rand_dz_gene_up,rand_dz_gene_down,cmap_exp_signature))
+}
+
+p <- sapply(dz_cmap_scores, function(score){
+  sum(random_cmap_scores < score)/length(random_cmap_scores)
+})
+
+padj <- p.adjust(p, "fdr")
+results <- data.frame(id = sig.ids, cmap_score = dz_cmap_scores, p, padj)
+
+results <- merge(results, lincs_sig_info, by = "id")
+results <- results[order(results$cmap_score),]
+write.csv(results, output_path)
+
+####################
+#summarize RGES
+lincs_drug_prediction <- read.csv(output_path)
+
+#should use pert_dose > 0.01
+lincs_drug_prediction_subset <- subset(lincs_drug_prediction,  pert_dose > 0 & pert_time %in% c(6, 24))
+#pairs that share the same drug and cell id
+lincs_drug_prediction_pairs <- merge(lincs_drug_prediction_subset, lincs_drug_prediction_subset, by=c("pert_iname", "cell_id")) 
+#x is the reference
+lincs_drug_prediction_pairs <- subset(lincs_drug_prediction_pairs, id.x != id.y & pert_time.x == 24 & pert_dose.x == 10) #, select <- c("cmap_score.x", "cmap_score.y", "pert_dose.y", "pert_time.y"))
+
+#difference of RGES to the reference 
+lincs_drug_prediction_pairs$cmap_diff <- lincs_drug_prediction_pairs$cmap_score.x - lincs_drug_prediction_pairs$cmap_score.y
+lincs_drug_prediction_pairs$dose <- round(log(lincs_drug_prediction_pairs$pert_dose.y, 2), 1)
+
+#estimate difference
+lincs_drug_prediction_pairs$dose_bin <- ifelse(lincs_drug_prediction_pairs$pert_dose.y < 10, "low", "high")
+diff <- tapply(lincs_drug_prediction_pairs$cmap_diff, paste(lincs_drug_prediction_pairs$dose_bin, lincs_drug_prediction_pairs$pert_time.y), mean)
+
+#ignore weighting cell lines
+lincs_cell_line_weight <- read.csv("lincs_cell_line_weight.csv")
+pred <- merge(lincs_drug_prediction, lincs_cell_line_weight, by.x="cell_id", by.y="lincs_cell_id")
+pred$RGES <- sapply(1:nrow(pred), function(id){getsRGES(pred$cmap_score[id], pred$cor[id], pred$pert_dose[id], pred$pert_time[id], diff, max(pred$cor))})
+
+cmpd_freq <- table(pred$pert_iname)
+pred <- subset(pred, pert_iname %in% names(cmpd_freq[cmpd_freq > 0]))
+
+pred_merged <- ddply(pred,  .(pert_iname),  summarise,
+                     mean = mean(RGES),
+                     n = length(RGES),
+                     median = median(RGES),
+                     sd = sd(RGES))
+pred_merged$sRGES <- pred_merged$mean
+pred_merged <- pred_merged[order(pred_merged$sRGES), ]
+
+write.csv(pred_merged, sRGES_output_path)
+
+##############
+#sRGES and drug efficacy
+drug_efficacy <- read.csv("drug_efficacy.csv")
+
+RGES_efficacy <- merge(pred_merged, drug_efficacy, by = "pert_iname")
+
+cor_test <- cor.test(RGES_efficacy$sRGES, log(RGES_efficacy$standard_value, 10), method="spearman", exact=FALSE) #
+lm_cmap_ic50 <- lm( log(standard_value, 10) ~ sRGES, RGES_efficacy)
+
+ggplot(RGES_efficacy, aes(sRGES, log(RGES_efficacy$standard_value, 10)  )) +  theme_bw()  + 
+  theme(legend.position ="bottom", axis.text=element_text(size=18), axis.title=element_text(size=18)) +                                                                                               
+  stat_smooth(method="lm", se=F, color="black")  + geom_point(size=3) + 
+  annotate("text", label = paste("r=", format(summary(lm_cmap_ic50)$r.squared ^ 0.5, digit=2), ", ",  "P=", format(anova(lm_cmap_ic50)$`Pr(>F)`[1], digit=3, scientific=T), sep=""), x = 0, y = 7.5, size = 6, colour = "black") +
+  annotate("text", label = paste("rho=", format(cor_test$estimate, digit=2), ", P=", format(cor_test$p.value, digit=3, scientific=T), sep=""), x = 0, y = 7.1, size = 6, colour = "black") +
+  scale_size(range = c(2, 5)) +
+  xlab("sRGES") + guides(shape=FALSE, size=FALSE) +
+  ylab("log10(IC50) nm") + coord_cartesian(xlim = c(-0.7, 0.7), ylim=c(-1, 8))
 ```
 
 # Supplementary Materials
