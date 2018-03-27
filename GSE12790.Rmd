@@ -34,12 +34,18 @@ library(GEOquery)
 library(genefilter)
 library(cluster)
 library(randomForest)
+library(plyr)
 # library(WGCNA)
 ```
 
 Define utility functions.
 ```{r}
 printf <- function(...) print(sprintf(...))
+```
+
+Settings:
+```{r}
+fast_run <- FALSE
 ```
 
 Load gene expression data (microarray) under GSE12790, which is already included in our GitHub repository (https://github.com/infphilo/cowork_pa).
@@ -197,12 +203,16 @@ hist(cor_table[,2])
 
 ```{r}
 gene_names <- rownames(h2009_exprs)
-most_pos_i <- cor_order[length(cor_order)]
-plot(x=logIC50, y=h2009_exprs[most_pos_i,], xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most positively correlated at", gene_names[most_pos_i]))
-abline(lm(t(h2009_exprs[most_pos_i,]) ~ logIC50))
-most_neg_i <- cor_order[1]
-plot(x=logIC50, y=h2009_exprs[most_neg_i,], xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most negatively correlated at", gene_names[most_neg_i]))
-abline(lm(t(h2009_exprs[most_neg_i,]) ~ logIC50))
+par(mfrow = c(3,2))
+for(i in cor_order[length(cor_order):(length(cor_order)-5)]) {
+  plot(x=logIC50, y=h2009_exprs[i,], cex=0.5, xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most positively correlated at", gene_names[i]))
+  abline(lm(t(h2009_exprs[i,]) ~ logIC50))
+}
+par(mfrow = c(3,2))
+for(i in cor_order[1:6]) {
+  plot(x=logIC50, y=h2009_exprs[i,], cex=0.5, xlab="IC50 (log)", ylab="Gene Expression (log)", main=paste("Most negatively correlated at", gene_names[i]))
+  abline(lm(t(h2009_exprs[i,]) ~ logIC50))
+}
 ```
 
 The following shows a heatmap based on the top 0.1% most positively and negatively correlated genes.
@@ -283,15 +293,24 @@ The number of genes that match positively and negatively correlated genes to IC5
 
 Calculate Reverse Gene Expression Score (RGES) developed by Chen et al. 2017.
 ```{r}
-# 
+gene_list <- rownames(lincs_signatures)
+
 cmap_score <- function(sig_up, sig_down, drug_signature) {
   num_genes <- nrow(drug_signature)
 
-  up_tags_rank <- merge(drug_signature, sig_up, by.x = "id", by.y = 1)
-  down_tags_rank <- merge(drug_signature, sig_down, by.x = "id", by.y = 1)
+  if(length(sig_up) > 0) {
+    up_tags_rank <- merge(drug_signature, sig_up, by.x = "id", by.y = 1)
+    up_tags_position <- sort(up_tags_rank$rank)
+  } else {
+    up_tags_position <- NULL
+  }
   
-  up_tags_position <- sort(up_tags_rank$rank)
-  down_tags_position <- sort(down_tags_rank$rank)
+  if(length(sig_down) > 0) {
+    down_tags_rank <- merge(drug_signature, sig_down, by.x = "id", by.y = 1)
+    down_tags_position <- sort(down_tags_rank$rank)
+  } else {
+    down_tags_position <- NULL
+  }
   
   num_tags_up <- length(up_tags_position)
   num_tags_down <- length(down_tags_position)
@@ -300,7 +319,6 @@ cmap_score <- function(sig_up, sig_down, drug_signature) {
   if(num_tags_up > 1) {
     a_up <- max(sapply(1:num_tags_up, function(j) j / num_tags_up - up_tags_position[j] / num_genes))
     b_up <- max(sapply(1:num_tags_up, function(j) up_tags_position[j] / num_genes - (j-1) / num_tags_up))
-    
     if(a_up > b_up) {
       ks_up <- a_up
     } else {
@@ -312,7 +330,6 @@ cmap_score <- function(sig_up, sig_down, drug_signature) {
   if(num_tags_down > 1) {
     a_down <- max(sapply(1:num_tags_down, function(j) j / num_tags_down - down_tags_position [j] / num_genes))
     b_down <- max(sapply(1:num_tags_down, function(j) down_tags_position[j] / num_genes - (j-1) / num_tags_down))
-    
     if(a_down > b_down) {
       ks_down <- a_down
     } else {
@@ -323,26 +340,42 @@ cmap_score <- function(sig_up, sig_down, drug_signature) {
   connectivity_score <- ks_up - ks_down
   return(connectivity_score)
 }
+```
 
-getsRGES <- function(RGES, cor, pert_dose, pert_time, diff, max_cor) {
-  sRGES <- RGES
-  pert_time <- ifelse(pert_time < 24, "short", "long")
-  pert_dose <- ifelse(pert_dose < 10, "low", "high")
-  if(pert_time == "short" & pert_dose == "low") {
-    sRGES <- sRGES + diff[4]
-  }
-  if(pert_dose ==  "low" & pert_time == "long") {
-    sRGES <- sRGES + diff[2]
-  }
-  if(pert_dose ==  "high" & pert_time == "short") {
-    sRGES <- sRGES + diff[1]
-  }
-  return(sRGES * cor/max_cor) #
+```{r eval=FALSE}
+# Test cmap_score function
+exp_signature <- data.frame(gene_list,  rank(-1 * lincs_signatures[,1], ties.method="random"))
+colnames(exp_signature) <- c("id", "rank")
+sorted_exp_signature <- exp_signature[order(exp_signature$rank),]
+  
+pos_signature <- sorted_exp_signature[1:50, "id"]
+neg_signature <- sorted_exp_signature[(nrow(exp_signature)-49):nrow(exp_signature), "id"]
+  
+printf("Testing positive cmap score:")
+print(cmap_score(pos_signature, c(), exp_signature))
+  
+printf("Testing negitive cmap score:")
+print(cmap_score(c(), pos_signature, exp_signature))
+  
+printf("Testing positive cmap score2:")
+print(cmap_score(c(), neg_signature, exp_signature))
+  
+printf("Testing negitive cmap score2:")
+print(cmap_score(neg_signature, c(), exp_signature))
+  
+printf("Testing positive and negitive cmap score:")
+print(cmap_score(pos_signature, neg_signature, exp_signature))
+  
+printf("Testing negitive and positive cmap score:")
+print(cmap_score(neg_signature, pos_signature, exp_signature))
+```
+  
+```{r}
+if(fast_run) {
+  exp_ids <- lincs_sig_info$id[1:1000]
+} else {
+  exp_ids <- lincs_sig_info$id
 }
-
-exp_ids <- lincs_sig_info$id[1:5000]
-# exp_ids <- lincs_sig_info$id
-gene_list <- rownames(lincs_signatures)
 
 dz_genes_up <- gene_names[pos_rows]
 dz_genes_down <- gene_names[neg_rows]
@@ -359,68 +392,78 @@ for (i in 1:nrow(cmap_scores)) {
 
 cmap_score_info <- merge(cmap_scores, lincs_sig_info, by.x = "exp_id", by.y = "id")
 cmap_score_info <- cmap_score_info[order(cmap_score_info$score),]
-print("Top 50 perturbagen candidates:")
-print(cmap_score_info[1:50,])
-print("CMAP scores related to Palbociclib:")
-print(cmap_score_info[cmap_score_info$exp_id %in% lincs_sig_info[lincs_sig_info$pert_iname == "palbociclib","id"],])
 ```
 
-```{r eval=FALSE}
-#random scores
-N_PERMUTATIONS <- 10000 #default 100000
-random_sig_ids <- sample(1:ncol(lincs_signatures),N_PERMUTATIONS,replace=T)
-count <- 0
+Top 50 perturbagen candidates:
+```{r}
+cmap_score_info[1:20,]
+```
+
+CMAP scores related to Palbociclib:
+```{r}
+cmap_score_info[cmap_score_info$exp_id %in% lincs_sig_info[lincs_sig_info$pert_iname == "palbociclib", "id"],]
+```
+
+```{r}
+N_PERMUTATIONS <- ifelse(fast_run, 1000, 10000)
+random_sig_ids <- sample(1:ncol(lincs_signatures), N_PERMUTATIONS, replace=T)
 random_cmap_scores <- NULL
-for (expr_id in random_sig_ids){
-  count <- count + 1
-  # print(count)
-  if (landmark ==1){
-    cmap_exp_signature <- data.frame(gene.list,  rank(-1 * lincs_signatures[, as.character(exp_id)], ties.method="random"))    
-  }else{
-    cmap_exp_signature <- cbind(gene.list,  get.sigs(exp_id))    
-  }
-  colnames(cmap_exp_signature) <- c("ids","rank")
-  
-  random_input_signature_genes <- sample(gene.list, (nrow(dz_genes_up)+nrow(dz_genes_down)))
-  rand_dz_gene_up <- data.frame(GeneID=random_input_signature_genes[1:nrow(dz_genes_up)])
-  rand_dz_gene_down <- data.frame(GeneID=random_input_signature_genes[(nrow(dz_genes_up)+1):length(random_input_signature_genes)])
-  random_cmap_scores <- c(random_cmap_scores, cmap_score_new(rand_dz_gene_up,rand_dz_gene_down,cmap_exp_signature))
+for(expr_id in random_sig_ids) {
+  cmap_exp_signature <- data.frame(gene_list,  rank(-1 * lincs_signatures[, as.character(exp_id)], ties.method="random"))
+  colnames(cmap_exp_signature) <- c("id", "rank")
+  random_input_signature_genes <- sample(gene_names, (length(dz_genes_up) + length(dz_genes_down)))
+  rand_dz_gene_up <- random_input_signature_genes[1:length(dz_genes_up)]
+  rand_dz_gene_down <- random_input_signature_genes[(length(dz_genes_up)+1):length(random_input_signature_genes)]
+  random_cmap_scores <- c(random_cmap_scores, cmap_score(rand_dz_gene_up, rand_dz_gene_down, cmap_exp_signature))
 }
 
-p <- sapply(dz_cmap_scores, function(score){
-  sum(random_cmap_scores < score)/length(random_cmap_scores)
-})
+p <- sapply(cmap_scores$score, function(score) sum(random_cmap_scores < score) / length(random_cmap_scores))
 
 padj <- p.adjust(p, "fdr")
-results <- data.frame(id = sig.ids, cmap_score = dz_cmap_scores, p, padj)
-
+results <- data.frame(id = exp_ids, cmap_score = cmap_scores$score, p, padj)
 results <- merge(results, lincs_sig_info, by = "id")
 results <- results[order(results$cmap_score),]
-write.csv(results, output_path)
+results[1:20,]
+```
 
-####################
-#summarize RGES
-lincs_drug_prediction <- read.csv(output_path)
+```{r}
+# Code is from Chen et al. 2017 and modified
+getsRGES <- function(RGES, cor, pert_dose, pert_time, diff, max_cor) {
+  sRGES <- RGES
+  pert_time <- ifelse(pert_time < 24, "short", "long")
+  pert_dose <- ifelse(pert_dose < 10, "low", "high")
+  if(pert_time == "short" & pert_dose == "low") {
+    sRGES <- sRGES + diff[4]
+  } else if(pert_dose ==  "low" & pert_time == "long") {
+    sRGES <- sRGES + diff[2]
+  } else if(pert_dose ==  "high" & pert_time == "short") {
+    sRGES <- sRGES + diff[1]
+  }
+  return(sRGES * cor/max_cor)
+}
 
-#should use pert_dose > 0.01
+lincs_drug_prediction <- results
+
+# should use pert_dose > 0.01
 lincs_drug_prediction_subset <- subset(lincs_drug_prediction,  pert_dose > 0 & pert_time %in% c(6, 24))
-#pairs that share the same drug and cell id
-lincs_drug_prediction_pairs <- merge(lincs_drug_prediction_subset, lincs_drug_prediction_subset, by=c("pert_iname", "cell_id")) 
-#x is the reference
-lincs_drug_prediction_pairs <- subset(lincs_drug_prediction_pairs, id.x != id.y & pert_time.x == 24 & pert_dose.x == 10) #, select <- c("cmap_score.x", "cmap_score.y", "pert_dose.y", "pert_time.y"))
 
-#difference of RGES to the reference 
+# pairs that share the same drug and cell id
+lincs_drug_prediction_pairs <- merge(lincs_drug_prediction_subset, lincs_drug_prediction_subset, by=c("pert_iname", "cell_id")) 
+
+# x is the reference
+lincs_drug_prediction_pairs <- subset(lincs_drug_prediction_pairs, id.x != id.y & pert_time.x == 24 & pert_dose.x == 10) #, 
+# difference of RGES to the reference 
 lincs_drug_prediction_pairs$cmap_diff <- lincs_drug_prediction_pairs$cmap_score.x - lincs_drug_prediction_pairs$cmap_score.y
 lincs_drug_prediction_pairs$dose <- round(log(lincs_drug_prediction_pairs$pert_dose.y, 2), 1)
 
-#estimate difference
+# estimate difference
 lincs_drug_prediction_pairs$dose_bin <- ifelse(lincs_drug_prediction_pairs$pert_dose.y < 10, "low", "high")
 diff <- tapply(lincs_drug_prediction_pairs$cmap_diff, paste(lincs_drug_prediction_pairs$dose_bin, lincs_drug_prediction_pairs$pert_time.y), mean)
 
-#ignore weighting cell lines
+# ignore weighting cell lines
 lincs_cell_line_weight <- read.csv("lincs_cell_line_weight.csv")
 pred <- merge(lincs_drug_prediction, lincs_cell_line_weight, by.x="cell_id", by.y="lincs_cell_id")
-pred$RGES <- sapply(1:nrow(pred), function(id){getsRGES(pred$cmap_score[id], pred$cor[id], pred$pert_dose[id], pred$pert_time[id], diff, max(pred$cor))})
+pred$RGES <- sapply(1:nrow(pred), function(id) getsRGES(pred$cmap_score[id], pred$cor[id], pred$pert_dose[id], pred$pert_time[id], diff, max(pred$cor)))
 
 cmpd_freq <- table(pred$pert_iname)
 pred <- subset(pred, pert_iname %in% names(cmpd_freq[cmpd_freq > 0]))
@@ -432,26 +475,7 @@ pred_merged <- ddply(pred,  .(pert_iname),  summarise,
                      sd = sd(RGES))
 pred_merged$sRGES <- pred_merged$mean
 pred_merged <- pred_merged[order(pred_merged$sRGES), ]
-
-write.csv(pred_merged, sRGES_output_path)
-
-##############
-#sRGES and drug efficacy
-drug_efficacy <- read.csv("drug_efficacy.csv")
-
-RGES_efficacy <- merge(pred_merged, drug_efficacy, by = "pert_iname")
-
-cor_test <- cor.test(RGES_efficacy$sRGES, log(RGES_efficacy$standard_value, 10), method="spearman", exact=FALSE) #
-lm_cmap_ic50 <- lm( log(standard_value, 10) ~ sRGES, RGES_efficacy)
-
-ggplot(RGES_efficacy, aes(sRGES, log(RGES_efficacy$standard_value, 10)  )) +  theme_bw()  + 
-  theme(legend.position ="bottom", axis.text=element_text(size=18), axis.title=element_text(size=18)) +                                                                                               
-  stat_smooth(method="lm", se=F, color="black")  + geom_point(size=3) + 
-  annotate("text", label = paste("r=", format(summary(lm_cmap_ic50)$r.squared ^ 0.5, digit=2), ", ",  "P=", format(anova(lm_cmap_ic50)$`Pr(>F)`[1], digit=3, scientific=T), sep=""), x = 0, y = 7.5, size = 6, colour = "black") +
-  annotate("text", label = paste("rho=", format(cor_test$estimate, digit=2), ", P=", format(cor_test$p.value, digit=3, scientific=T), sep=""), x = 0, y = 7.1, size = 6, colour = "black") +
-  scale_size(range = c(2, 5)) +
-  xlab("sRGES") + guides(shape=FALSE, size=FALSE) +
-  ylab("log10(IC50) nm") + coord_cartesian(xlim = c(-0.7, 0.7), ylim=c(-1, 8))
+pred_merged[1:20,]
 ```
 
 # Supplementary Materials
